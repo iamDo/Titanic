@@ -133,6 +133,8 @@ func highlightDifferences(pair DirectoryPair) string {
 			out += fmt.Sprintf("Missing in destination: %s [%s]\n", rel, sh)
 		} else if sh != dh {
 			out += fmt.Sprintf("Mismatch: %s src[%s] dst[%s]\n", rel, sh, dh)
+		} else {
+			out += fmt.Sprintf("Match: %s[%s]\n", rel, sh)
 		}
 	}
 	for rel, dh := range dstMap {
