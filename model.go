@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"titanic_app/diff"
@@ -22,6 +23,9 @@ var (
 )
 
 // Message types for async updates
+// tickMsg triggers periodic refresh
+type tickMsg time.Time
+
 type diffsMsg [][]diff.Diff
 
 type syncStartMsg struct {
@@ -72,9 +76,12 @@ func computeAllDiffs(pairs []DirectoryPair) [][]diff.Diff {
 
 // computeDiffsCmd returns a Cmd to recompute all diffs asynchronously
 func computeDiffsCmd(pairs []DirectoryPair) tea.Cmd {
-	return func() tea.Msg {
-		return diffsMsg(computeAllDiffs(pairs))
-	}
+	return func() tea.Msg { return diffsMsg(computeAllDiffs(pairs)) }
+}
+
+// tickCmd sends a tickMsg every 10 seconds
+func tickCmd() tea.Cmd {
+	return tea.Tick(10*time.Second, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
 
 // syncStartCmd returns a Cmd that indicates a file sync has started
@@ -110,11 +117,18 @@ func syncFileCmd(index int, path string, pr DirectoryPair) tea.Cmd {
 }
 
 // Init does nothing initially (diffs already computed)
-func (m Model) Init() tea.Cmd { return nil }
+func (m Model) Init() tea.Cmd {
+	// start periodic refresh
+	return tickCmd()
+}
 
 // Update handles incoming messages and key events
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tickMsg:
+		m.Loading = true
+		return m, tea.Batch(computeDiffsCmd(m.Pairs), tickCmd())
+
 	case diffsMsg:
 		m.Diffs = [][]diff.Diff(msg)
 		m.Loading = false
