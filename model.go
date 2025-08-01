@@ -6,10 +6,19 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"titanic_app/diff"
 
 	bubbletea "github.com/charmbracelet/bubbletea"
 	tea      "github.com/charmbracelet/bubbletea"
+)
+
+// Styles for diff rows and messages
+var (
+	matchStyle   = lipgloss.NewStyle().Background(lipgloss.Color("#D4EDDA")).Foreground(lipgloss.Color("#155724"))
+	missingStyle = lipgloss.NewStyle().Background(lipgloss.Color("#F8D7DA")).Foreground(lipgloss.Color("#721C24"))
+	syncingStyle = lipgloss.NewStyle().Background(lipgloss.Color("#D1ECF1")).Foreground(lipgloss.Color("#0C5460")).Bold(true)
+	refreshStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#0C5460")).Bold(true)
 )
 
 // Message types for async updates
@@ -172,27 +181,38 @@ func (m Model) View() string {
 	}
 	p := m.Pairs[m.Index]
 	head := fmt.Sprintf("Pair %d/%d %s -> %s\n", m.Index+1, len(m.Pairs), p.Source, p.Destination)
-	if m.Loading {
-		return head + "Refreshing...\n"
-	}
 	var out strings.Builder
 	for _, d := range m.Diffs[m.Index] {
-		status := ""
-		if _, ok := m.Syncing[d.Path]; ok {
-			status = "Syncing"
+		// Determine status label
+		var statusLabel string
+		if _, syncing := m.Syncing[d.Path]; syncing {
+			statusLabel = "Syncing"
 		} else {
 			switch d.Status {
 			case diff.Match:
-				status = "Match"
+				statusLabel = "Match"
 			case diff.MissingSource:
-				status = "Missing source"
+				statusLabel = "Missing source"
 			case diff.MissingDestination:
-				status = "Missing destination"
+				statusLabel = "Missing destination"
 			case diff.Mismatch:
-				status = "Mismatch"
+				statusLabel = "Mismatch"
 			}
 		}
-		out.WriteString(fmt.Sprintf("%-20s %-45s %-33s %-33s\n", status, d.Path, d.SrcHash, d.DstHash))
+		// Build and style the line
+		line := fmt.Sprintf("%-20s %-45s %-33s %-33s", statusLabel, d.Path, d.SrcHash, d.DstHash)
+		var styled string
+		if _, syncing := m.Syncing[d.Path]; syncing {
+			styled = syncingStyle.Render(line)
+		} else if d.Status == diff.Match {
+			styled = matchStyle.Render(line)
+		} else {
+			styled = missingStyle.Render(line)
+		}
+		out.WriteString(styled + "\n")
+	}
+	if m.Loading {
+		out.WriteString(refreshStyle.Render("Refreshing...") + "\n")
 	}
 	return head + out.String() + "\nPress tab to switch, r to refresh, s to sync, q to quit"
 }
