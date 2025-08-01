@@ -1,0 +1,5 @@
+directory_pairs:
+  - source: "buildserver:/mnt/build/luna-yocto/_output/debug/"
+    destination: "/Users/do/Data/Audac/Deploy/debug-3.1.2/"
+  - source: "/Users/do/Data/Audac/Deploy/debug-3.0.0/"
+    destination: "/Users/do/Data/Audac/Deploy/debug-3.1.2/"

@@ -1,0 +1,186 @@
+package main
+
+import (
+	"bufio"
+	"bytes"
+	"crypto/md5"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"strings"
+
+	"github.com/spf13/viper"
+	bubbletea "github.com/charmbracelet/bubbletea"
+)
+
+// DirectoryPair represents a source (local or remote) and destination
+// Remote source format: host:/absolute/path/
+type DirectoryPair struct {
+	Source      string `mapstructure:"source"`
+	Destination string `mapstructure:"destination"`
+}
+
+// Config holds directory pairs
+type Config struct {
+	DirectoryPairs []DirectoryPair `mapstructure:"directory_pairs"`
+}
+
+// md5Hash computes MD5 for a local file
+func md5Hash(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	
+	h := md5.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// getRemoteMap uses SSH to run md5sum on remote files
+func getRemoteMap(source string) (map[string]string, error) {
+	// parse host and path
+	parts := strings.SplitN(source, ":", 2)
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid remote source %s", source)
+	}
+	host, path := parts[0], parts[1]
+	// ensure no trailing slash in path for cd
+	path = strings.TrimRight(path, "/")
+	// build command
+	cmd := exec.Command("ssh", host, fmt.Sprintf("cd %s && find . -type f -exec md5sum {} +", path))
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("ssh error: %w", err)
+	}
+
+	m := make(map[string]string)
+	s := bufio.NewScanner(&out)
+	for s.Scan() {
+		fields := strings.Fields(s.Text())
+		if len(fields) < 2 {
+			continue
+		}
+		hash := fields[0]
+		file := fields[1]
+		rel := strings.TrimPrefix(file, "./")
+		m[rel] = hash
+	}
+	return m, nil
+}
+
+// listLocalMap uses find+md5sum locally
+func listLocalMap(dir string) (map[string]string, error) {
+	// ensure no trailing slash
+	dir = strings.TrimRight(dir, "/")
+	cmd := exec.Command("sh", "-c", fmt.Sprintf("cd %s && find . -type f -exec md5sum {} +", dir))
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("local find error: %w", err)
+	}
+
+
+	m := make(map[string]string)
+	s := bufio.NewScanner(&out)
+	for s.Scan() {
+		fields := strings.Fields(s.Text())
+		if len(fields) < 2 {
+			continue
+		}
+		hash := fields[0]
+		file := fields[1]
+		rel := strings.TrimPrefix(file, "./")
+		m[rel] = hash
+	}
+	return m, nil
+}
+
+// highlightDifferences compares source vs destination maps
+func highlightDifferences(pair DirectoryPair) string {
+	fmt.Printf("DEBUG: checking Source='%s', Destination='%s'\n", pair.Source, pair.Destination)
+
+	var srcMap map[string]string
+	var err error
+	if strings.Contains(pair.Source, ":") {
+		srcMap, err = getRemoteMap(pair.Source)
+	} else {
+		srcMap, err = listLocalMap(pair.Source)
+	}
+	if err != nil {
+		return fmt.Sprintf("Error retrieving source: %v", err)
+	}
+
+	// always local for destination
+	dstMap, err := listLocalMap(pair.Destination)
+	if err != nil {
+		return fmt.Sprintf("Error retrieving destination: %v", err)
+	}
+
+	out := ""
+	for rel, sh := range srcMap {
+		dh, ok := dstMap[rel]
+		if !ok {
+			out += fmt.Sprintf("Missing in destination: %s [%s]\n", rel, sh)
+		} else if sh != dh {
+			out += fmt.Sprintf("Mismatch: %s src[%s] dst[%s]\n", rel, sh, dh)
+		}
+	}
+	for rel, dh := range dstMap {
+		if _, ok := srcMap[rel]; !ok {
+			out += fmt.Sprintf("Missing in source: %s [%s]\n", rel, dh)
+		}
+	}
+	return out
+}
+
+// Bubbletea model
+type Model struct {
+	Pairs []DirectoryPair
+	Index int
+}
+func NewModel(cfg Config) Model { return Model{Pairs: cfg.DirectoryPairs, Index: 0} }
+func (m Model) Init() bubbletea.Cmd { return nil }
+func (m Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
+	switch msg := msg.(type) {
+	case bubbletea.KeyMsg:
+		switch msg.String() {
+		case "q": return m, bubbletea.Quit
+		case "tab":
+			if m.Index < len(m.Pairs)-1 { m.Index++ } else { m.Index = 0 }
+		}
+	}
+	return m, nil
+}
+func (m Model) View() string {
+	if len(m.Pairs)==0 { return "No directory pairs\n" }
+	p := m.Pairs[m.Index]
+	head := fmt.Sprintf("Pair %d/%d %s -> %s\n", m.Index+1, len(m.Pairs), p.Source, p.Destination)
+	body := highlightDifferences(p)
+	return head + body + "\nPress tab to switch, q to quit"
+}
+
+func loadConfig() (Config, error) {
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath("./config")
+	if err := viper.ReadInConfig(); err!=nil { return Config{}, err }
+	var cfg Config
+	if err := viper.Unmarshal(&cfg); err!=nil { return Config{}, err }
+	return cfg, nil
+}
+
+func main() {
+	cfg, err := loadConfig()
+	if err!=nil { fmt.Println("config:",err); os.Exit(1) }
+	p := bubbletea.NewProgram(NewModel(cfg))
+	if _, err := p.Run(); err!=nil { fmt.Println("run:",err) }
+}
