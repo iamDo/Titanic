@@ -105,9 +105,9 @@ func listLocalMap(dir string) (map[string]string, error) {
 	return m, nil
 }
 
-// padColumns formats three columns: status, srcHash, dstHash
-func padColumns(status, src, dst string) string {
-	return fmt.Sprintf("%-60s %-35s %-35s\n", status, src, dst)
+// padColumns formats four columns: status, filename, srcHash, dstHash
+func padColumns(status, file, src, dst string) string {
+	return fmt.Sprintf("%-15s %-30s %-40s %-40s\n", status, file, src, dst)
 }
 
 // highlightDifferences compares source vs destination maps
@@ -135,16 +135,16 @@ func highlightDifferences(pair DirectoryPair) string {
 	for rel, sh := range srcMap {
 		dh, ok := dstMap[rel]
 		if !ok {
-			out += padColumns(fmt.Sprintf("Missing destination: %s", rel), sh, "")
+			out += padColumns("Missing destination", rel, sh, "")
 		} else if sh != dh {
-			out += padColumns(fmt.Sprintf("Mismatch: %s", rel), sh, dh)
+			out += padColumns("Mismatch", rel, sh, dh)
 		} else {
-			out += padColumns(fmt.Sprintf("Match: %s", rel), sh, dh)
+			out += padColumns("Match", rel, sh, dh)
 		}
 	}
 	for rel, dh := range dstMap {
 		if _, ok := srcMap[rel]; !ok {
-			out += padColumns(fmt.Sprintf("Missing source: %s", rel), "", dh)
+			out += padColumns("Missing source", rel, "", dh)
 		}
 	}
 	return out
