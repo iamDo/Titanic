@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -47,36 +46,30 @@ type Diff struct {
 // ExecCommand is the function used to invoke external commands (e.g., ssh). Can be overridden in tests.
 var ExecCommand = exec.Command
 
-// ListLocal walks the given directory and returns MD5 hashes for all files.
+// ListLocal lists only files directly under the given directory and returns their MD5 hashes.
 func ListLocal(dir string) ([]FileHash, error) {
 	var results []FileHash
-	dir = strings.TrimRight(dir, string(os.PathSeparator))
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
 		}
-		if d.IsDir() {
-			return nil
-		}
-		rel, err := filepath.Rel(dir, path)
-		if err != nil {
-			return err
-		}
+		rel := entry.Name()
+		path := filepath.Join(dir, rel)
 		f, err := os.Open(path)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		defer f.Close()
 		h := md5.New()
 		if _, err := io.Copy(h, f); err != nil {
-			return err
+			return nil, err
 		}
 		hash := hex.EncodeToString(h.Sum(nil))
 		results = append(results, FileHash{Path: rel, Hash: hash})
-		return nil
-	})
-	if err != nil {
-		return nil, err
 	}
 	return results, nil
 }
