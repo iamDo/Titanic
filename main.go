@@ -194,7 +194,12 @@ func main() {
 	if *noTUI {
 		for i, pair := range cfg.DirectoryPairs {
 			fmt.Printf("Pair %d/%d %s -> %s\n", i+1, len(cfg.DirectoryPairs), pair.Source, pair.Destination)
-			fmt.Print(highlightDifferences(pair))
+			diffs := highlightDifferences(pair)
+		if diffs == "" {
+			fmt.Println("All files in sync")
+		} else {
+			fmt.Print(diffs)
+		}
 		}
 		return
 	}
