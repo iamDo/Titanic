@@ -34,7 +34,7 @@ func (m Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 		case "r":
 			return m, nil
 		case "s":
-			syncDifferences(m.Pairs[m.Index])
+			// no-op sync (pending implementation)
 			return m, nil
 		}
 	}
