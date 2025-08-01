@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path/filepath"
 	"flag"
 	"bufio"
 	"bytes"
@@ -106,6 +107,55 @@ func listLocalMap(dir string) (map[string]string, error) {
 }
 
 // padColumns formats four columns: status, filename, srcHash, dstHash
+// syncDifferences syncs missing or mismatched files from source to destination
+func syncDifferences(pair DirectoryPair) {
+	// refresh maps
+	srcMap := make(map[string]string)
+	var err error
+	if strings.Contains(pair.Source, ":") {
+		srcMap, err = getRemoteMap(pair.Source)
+	} else {
+		srcMap, err = listLocalMap(pair.Source)
+	}
+	if err != nil {
+		fmt.Println("Error refreshing source maps:", err)
+		return
+	}
+	dstMap, err := listLocalMap(pair.Destination)
+	if err != nil {
+		fmt.Println("Error refreshing destination maps:", err)
+		return
+	}
+	// sync each file
+	for rel, sh := range srcMap {
+		dh, ok := dstMap[rel]
+		if ok && sh == dh {
+			continue
+		}
+		// ensure destination dir exists
+		destPath := filepath.Join(pair.Destination, rel)
+		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+			fmt.Println("Error creating dest dir:", err)
+			continue
+		}
+		// build rsync command
+		var cmd *exec.Cmd
+		if strings.Contains(pair.Source, ":") {
+			// remote source
+			hostPath := fmt.Sprintf("%s:%s/%s", strings.SplitN(pair.Source, ":", 2)[0], strings.TrimRight(strings.SplitN(pair.Source, ":", 2)[1], "/"), rel)
+			cmd = exec.Command("rsync", "-avz", hostPath, destPath)
+		} else {
+			srcPath := filepath.Join(pair.Source, rel)
+			cmd = exec.Command("rsync", "-avz", srcPath, destPath)
+		}
+		fmt.Println("Syncing", rel)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			fmt.Printf("Error syncing %s: %v\nOutput: %s\n", rel, err, string(out))
+		}
+	}
+}
+
+// padColumns formats four columns: status, filename, srcHash, dstHash
 func padColumns(status, file, src, dst string) string {
 	return fmt.Sprintf("%-15s %-45s %-33s %-33s\n", status, file, src, dst)
 }
@@ -158,6 +208,8 @@ type Model struct {
 func NewModel(cfg Config) Model { return Model{Pairs: cfg.DirectoryPairs, Index: 0} }
 func (m Model) Init() bubbletea.Cmd { return nil }
 func (m Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
+	// before handling keys, refresh differences by regenerating nothing (r will trigger re-render)
+
 	switch msg := msg.(type) {
 	case bubbletea.KeyMsg:
 		switch msg.String() {
@@ -170,6 +222,12 @@ func (m Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 				m.Index = 0
 			}
 		case "r":
+			// refresh: no state change, re-render
+			return m, nil
+		case "s":
+			// sync missing/mismatch files
+			syncDifferences(m.Pairs[m.Index])
+			return m, nil
 			// refresh: no state change needed, just re-render
 			return m, nil
 		}
@@ -181,7 +239,7 @@ func (m Model) View() string {
 	p := m.Pairs[m.Index]
 	head := fmt.Sprintf("Pair %d/%d %s -> %s\n", m.Index+1, len(m.Pairs), p.Source, p.Destination)
 	body := highlightDifferences(p)
-	return head + body + "\nPress tab to switch, r to refresh, q to quit"
+	return head + body + "\nPress tab to switch, r to refresh, s to sync, q to quit"
 }
 
 func loadConfig() (Config, error) {
