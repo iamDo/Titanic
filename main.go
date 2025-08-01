@@ -107,7 +107,7 @@ func listLocalMap(dir string) (map[string]string, error) {
 
 // highlightDifferences compares source vs destination maps
 func highlightDifferences(pair DirectoryPair) string {
-	fmt.Printf("DEBUG: checking Source='%s', Destination='%s'\n", pair.Source, pair.Destination)
+	
 
 	var srcMap map[string]string
 	var err error
