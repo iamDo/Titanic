@@ -107,7 +107,7 @@ func listLocalMap(dir string) (map[string]string, error) {
 
 // padColumns formats four columns: status, filename, srcHash, dstHash
 func padColumns(status, file, src, dst string) string {
-	return fmt.Sprintf("%-15s %-30s %-40s %-40s\n", status, file, src, dst)
+	return fmt.Sprintf("%-15s %-45s %-33s %-33s\n", status, file, src, dst)
 }
 
 // highlightDifferences compares source vs destination maps
@@ -161,9 +161,17 @@ func (m Model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 	switch msg := msg.(type) {
 	case bubbletea.KeyMsg:
 		switch msg.String() {
-		case "q": return m, bubbletea.Quit
+		case "q":
+			return m, bubbletea.Quit
 		case "tab":
-			if m.Index < len(m.Pairs)-1 { m.Index++ } else { m.Index = 0 }
+			if m.Index < len(m.Pairs)-1 {
+				m.Index++
+			} else {
+				m.Index = 0
+			}
+		case "r":
+			// refresh: no state change needed, just re-render
+			return m, nil
 		}
 	}
 	return m, nil
@@ -173,7 +181,7 @@ func (m Model) View() string {
 	p := m.Pairs[m.Index]
 	head := fmt.Sprintf("Pair %d/%d %s -> %s\n", m.Index+1, len(m.Pairs), p.Source, p.Destination)
 	body := highlightDifferences(p)
-	return head + body + "\nPress tab to switch, q to quit"
+	return head + body + "\nPress tab to switch, r to refresh, q to quit"
 }
 
 func loadConfig() (Config, error) {
