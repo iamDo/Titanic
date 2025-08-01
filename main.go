@@ -1,20 +1,21 @@
 package main
 
 import (
-	"path/filepath"
-	"flag"
 	"bufio"
 	"bytes"
 	"crypto/md5"
 	"encoding/hex"
+	"flag"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
-	"github.com/spf13/viper"
 	bubbletea "github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/viper"
 )
 
 // DirectoryPair represents a source (local or remote) and destination
@@ -157,7 +158,7 @@ func syncDifferences(pair DirectoryPair) {
 
 // padColumns formats four columns: status, filename, srcHash, dstHash
 func padColumns(status, file, src, dst string) string {
-	return fmt.Sprintf("%-15s %-45s %-33s %-33s\n", status, file, src, dst)
+	return fmt.Sprintf("%-20s %-45s %-33s %-33s\n", status, file, src, dst)
 }
 
 // highlightDifferences compares source vs destination maps
@@ -277,6 +278,6 @@ func main() {
 		return
 	}
 	// TUI mode
-	p := bubbletea.NewProgram(NewModel(cfg))
+	p := bubbletea.NewProgram(NewModel(cfg), tea.WithAltScreen())
 	if _, err := p.Run(); err!=nil { fmt.Println("run:",err) }
 }
