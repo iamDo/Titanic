@@ -196,6 +196,7 @@ func (m Model) View() string {
 	p := m.Pairs[m.Index]
 	head := fmt.Sprintf("Pair %d/%d %s -> %s\n", m.Index+1, len(m.Pairs), p.Source, p.Destination)
 	var out strings.Builder
+	foot := "\n"
 	for _, d := range m.Diffs[m.Index] {
 		// Determine status label
 		var statusLabel string
@@ -226,7 +227,8 @@ func (m Model) View() string {
 		out.WriteString(styled + "\n")
 	}
 	if m.Loading {
-		out.WriteString(refreshStyle.Render("Refreshing...") + "\n")
+		foot = refreshStyle.Render("Refreshing...") + foot
 	}
+	out.WriteString(foot)
 	return head + out.String() + "\nPress tab to switch, r to refresh, s to sync, q to quit"
 }
