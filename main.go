@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"bufio"
 	"bytes"
 	"crypto/md5"
@@ -179,8 +180,25 @@ func loadConfig() (Config, error) {
 }
 
 func main() {
+	// parse command-line flags
+	noTUI := flag.Bool("no-tui", false, "output without TUI")
+	flag.Parse()
+
+	// load configuration
 	cfg, err := loadConfig()
-	if err!=nil { fmt.Println("config:",err); os.Exit(1) }
+	if err != nil {
+		fmt.Println("config:", err)
+		os.Exit(1)
+	}
+	// non-TUI mode
+	if *noTUI {
+		for i, pair := range cfg.DirectoryPairs {
+			fmt.Printf("Pair %d/%d %s -> %s\n", i+1, len(cfg.DirectoryPairs), pair.Source, pair.Destination)
+			fmt.Print(highlightDifferences(pair))
+		}
+		return
+	}
+	// TUI mode
 	p := bubbletea.NewProgram(NewModel(cfg))
 	if _, err := p.Run(); err!=nil { fmt.Println("run:",err) }
 }
